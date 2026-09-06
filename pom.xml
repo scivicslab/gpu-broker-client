@@ -23,7 +23,7 @@
         <dependency>
             <groupId>com.scivicslab</groupId>
             <artifactId>pojo-actor</artifactId>
-            <version>3.5.0</version>
+            <version>4.0.0</version>
         </dependency>
 
         <dependency>
