@@ -50,6 +50,40 @@ final class GpuBrokerHttp implements JobResultPoller {
         return response.body();
     }
 
+    /**
+     * How many jobs the broker can run at once on {@code queueName}: the {@code totalSlots} of that
+     * queue in {@code GET /queues} (the sum over its endpoints). {@code 0} when the broker lists no
+     * such queue. A caller that wants to keep every slot busy without queuing behind itself submits
+     * this many jobs at a time.
+     */
+    public int totalSlots(String queueName) {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/queues"))
+                .GET()
+                .build();
+        HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
+        if (response.statusCode() != 200) {
+            throw new GpuBrokerClientException(
+                    "unexpected status " + response.statusCode() + " from GET /queues");
+        }
+        return parseTotalSlots(response.body(), queueName);
+    }
+
+    /** Reads {@code totalSlots} of the queue named {@code queueName} out of a {@code GET /queues} body;
+     *  {@code 0} if the queue is absent. Package-private so it is unit-testable without HTTP. */
+    int parseTotalSlots(String queuesJson, String queueName) {
+        try {
+            for (JsonNode queue : objectMapper.readTree(queuesJson)) {
+                if (queueName.equals(queue.path("name").asText())) {
+                    return queue.path("totalSlots").asInt(0);
+                }
+            }
+            return 0;
+        } catch (IOException e) {
+            throw new GpuBrokerClientException("malformed GET /queues body", e);
+        }
+    }
+
     /** Returns {@link JobResult#pending()} for a {@code 404} (job not found yet). */
     @Override
     public JobResult getJobResult(String queueName, String jobId) {

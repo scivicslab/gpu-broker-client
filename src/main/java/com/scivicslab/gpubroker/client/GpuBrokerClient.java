@@ -51,6 +51,15 @@ public final class GpuBrokerClient implements AutoCloseable {
                 POLL_INTERVAL.toSeconds(), POLL_INTERVAL.toSeconds(), TimeUnit.SECONDS);
     }
 
+    /**
+     * How many jobs the broker runs at once on {@code queueName} right now ({@code totalSlots} in
+     * {@code GET /queues}; {@code 0} if the queue is unknown). Submitting this many at a time keeps
+     * every slot busy without queuing behind one's own jobs.
+     */
+    public int totalSlots(String queueName) {
+        return http.totalSlots(queueName);
+    }
+
     /** Submits without a completion callback -- fire-and-forget beyond the flow-control wait. */
     public JobHandle submit(String queueName, byte[] body, String contentType, Priority priority) {
         return submit(queueName, body, contentType, priority, null);
