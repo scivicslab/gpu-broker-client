@@ -81,8 +81,12 @@ final class SubmissionTracker {
         }
     }
 
-    /** Hands the freed slot directly to the oldest waiter, if any; otherwise lowers the count. */
-    private void releaseSlot(String queueName) {
+    /**
+     * Hands the freed slot directly to the oldest waiter, if any; otherwise lowers the count.
+     * Called from {@link #pollOutstanding} when a job completes, and from {@link GpuBrokerClient#submit}
+     * when the POST after {@link #requestSlot} fails and the reserved slot has no job to complete it.
+     */
+    void releaseSlot(String queueName) {
         Deque<CompletableFuture<Void>> queueWaiting = waiting.get(queueName);
         if (queueWaiting != null && !queueWaiting.isEmpty()) {
             queueWaiting.pollFirst().complete(null);

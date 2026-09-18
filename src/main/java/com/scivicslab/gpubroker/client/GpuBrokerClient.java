@@ -68,7 +68,15 @@ public final class GpuBrokerClient implements AutoCloseable {
             throw new IllegalStateException("GpuBrokerClient is closed");
         }
         tracker.ask(t -> t.requestSlot(queueName)).join().join();
-        String jobId = http.postJob(queueName, body, contentType, priority);
+        String jobId;
+        try {
+            jobId = http.postJob(queueName, body, contentType, priority);
+        } catch (RuntimeException e) {
+            // No job exists for pollOutstanding to complete, so nothing else would ever free the
+            // slot reserved above; give it back here or targetPerQueue failures park every later submit.
+            tracker.tell(t -> t.releaseSlot(queueName));
+            throw e;
+        }
         tracker.tell(t -> t.recordSubmitted(queueName, jobId, onComplete));
         return new JobHandle(jobId, queueName);
     }

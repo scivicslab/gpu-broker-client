@@ -86,6 +86,28 @@ class SubmissionTrackerTest {
         assertTrue(tracker.isDrained());
     }
 
+    @Test
+    void releaseSlot_withoutAnyJobRecorded_admitsTheParkedWaiter() {
+        SubmissionTracker tracker = new SubmissionTracker(1, new FakeJobResultPoller());
+
+        tracker.requestSlot("q1").join();                       // reserved, then the POST fails
+        CompletableFuture<Void> secondSlot = tracker.requestSlot("q1");
+        assertFalse(secondSlot.isDone());
+
+        tracker.releaseSlot("q1");                              // what submit() does on a failed POST
+        assertTrue(secondSlot.isDone(), "the failed submission's slot must go to the waiter");
+    }
+
+    @Test
+    void releaseSlot_withoutAnyWaiter_lowersTheCountSoTheNextRequestIsGranted() {
+        SubmissionTracker tracker = new SubmissionTracker(1, new FakeJobResultPoller());
+
+        tracker.requestSlot("q1").join();
+        tracker.releaseSlot("q1");
+
+        assertTrue(tracker.requestSlot("q1").isDone(), "count is back to 0, so the slot is granted at once");
+    }
+
     /** Deterministic {@link JobResultPoller} stub: a job stays PENDING until explicitly {@link #complete}d. */
     private static final class FakeJobResultPoller implements JobResultPoller {
 
