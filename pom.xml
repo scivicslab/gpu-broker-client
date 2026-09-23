@@ -13,9 +13,36 @@
     <name>gpu-broker-client</name>
     <description>Flow-controlled client SDK for quarkus-gpu-broker's async job-submission endpoint. Independent of quarkus-gpu-broker itself -- HTTP and a JSON wire contract are the only coupling.</description>
 
+  <url>https://github.com/scivicslab/gpu-broker-client</url>
+
+  <licenses>
+    <license>
+      <name>Apache License, Version 2.0</name>
+      <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
+
+  <developers>
+    <developer>
+      <id>scivicslab</id>
+      <name>Scivics Lab</name>
+      <email>devteam@scivicslab.com</email>
+      <organization>Scivics Lab</organization>
+      <organizationUrl>https://scivics-lab.com</organizationUrl>
+    </developer>
+  </developers>
+
+  <scm>
+    <connection>scm:git:git://github.com/scivicslab/gpu-broker-client.git</connection>
+    <developerConnection>scm:git:ssh://github.com:scivicslab/gpu-broker-client.git</developerConnection>
+    <url>https://github.com/scivicslab/gpu-broker-client</url>
+  </scm>
+
+
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <maven.compiler.release>21</maven.compiler.release>
+        <maven.compiler.release>25</maven.compiler.release>
     </properties>
 
     <dependencies>
@@ -23,7 +50,7 @@
         <dependency>
             <groupId>com.scivicslab</groupId>
             <artifactId>pojo-actor</artifactId>
-            <version>4.0.0</version>
+            <version>4.2.0</version>
         </dependency>
 
         <dependency>
@@ -51,13 +78,59 @@
     <build>
         <finalName>${project.artifactId}-${project.version}</finalName>
         <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-javadoc-plugin</artifactId>
+        <version>3.6.3</version>
+        <executions>
+          <execution>
+            <id>attach-javadocs</id>
+            <goals><goal>jar</goal></goals>
+          </execution>
+        </executions>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-source-plugin</artifactId>
+        <version>3.3.0</version>
+        <executions>
+          <execution>
+            <id>attach-sources</id>
+            <goals><goal>jar-no-fork</goal></goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-gpg-plugin</artifactId>
+        <version>3.1.0</version>
+        <executions>
+          <execution>
+            <id>sign-artifacts</id>
+            <phase>verify</phase>
+            <goals><goal>sign</goal></goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.sonatype.central</groupId>
+        <artifactId>central-publishing-maven-plugin</artifactId>
+        <version>0.11.0</version>
+        <extensions>true</extensions>
+        <configuration>
+          <publishingServerId>central</publishingServerId>
+          <autoPublish>true</autoPublish>
+        </configuration>
+      </plugin>
+
 
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.12.0</version>
                 <configuration>
-                    <release>21</release>
+                    <release>25</release>
                 </configuration>
             </plugin>
 
