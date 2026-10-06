@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 class GpuBrokerHttpTest {
 
     private static final String QUEUES = "["
-            + "{\"name\":\"vllm-qwen3.8-flash-next\",\"activeSlots\":0,\"idleSlots\":32,\"totalSlots\":32},"
+            + "{\"name\":\"chat-qwen3.8-flash-next\",\"activeSlots\":0,\"idleSlots\":32,\"totalSlots\":32},"
             + "{\"name\":\"whisper-transcript\",\"activeSlots\":1,\"idleSlots\":1,\"totalSlots\":2,"
             + "\"endpoints\":[{\"address\":\"192.168.5.13:8003\"},{\"address\":\"192.168.5.18:8003\"}]}"
             + "]";
@@ -21,7 +21,7 @@ class GpuBrokerHttpTest {
     @Test
     void parseTotalSlots_knownQueue_returnsItsTotalSlots() {
         assertEquals(2, http.parseTotalSlots(QUEUES, "whisper-transcript"));
-        assertEquals(32, http.parseTotalSlots(QUEUES, "vllm-qwen3.8-flash-next"));
+        assertEquals(32, http.parseTotalSlots(QUEUES, "chat-qwen3.8-flash-next"));
     }
 
     @Test
