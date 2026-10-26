@@ -125,4 +125,94 @@ class SubmissionTrackerTest {
             return JobResult.pending();
         }
     }
+
+    /** The broker lost every job it was holding (it restarted without them): it answers 404 for all. */
+    private static final class LostJobPoller implements JobResultPoller {
+        boolean unreachable;
+
+        @Override
+        public JobResult getJobResult(String queueName, String jobId) {
+            if (unreachable) {
+                throw new GpuBrokerClientException("connection refused", new java.io.IOException());
+            }
+            return JobResult.unknown();
+        }
+    }
+
+    @Test
+    void pollOutstanding_keepsAJobTheBrokerAnswers404For_untilTheGracePeriodPasses() {
+        LostJobPoller poller = new LostJobPoller();
+        java.time.Instant[] now = {java.time.Instant.parse("2026-10-25T00:00:00Z")};
+        SubmissionTracker tracker = new SubmissionTracker(1, poller, java.time.Duration.ofSeconds(60), () -> now[0]);
+        tracker.requestSlot("q1");
+        java.util.List<JobResult> reported = new java.util.ArrayList<>();
+        tracker.recordSubmitted("q1", "job-1", reported::add);
+
+        tracker.pollOutstanding();
+        now[0] = now[0].plusSeconds(59);
+        tracker.pollOutstanding();
+
+        assertTrue(reported.isEmpty(), "within the grace period the job is still waited for");
+        assertTrue(!tracker.isDrained());
+    }
+
+    @Test
+    void pollOutstanding_reportsALostJobFailed_andGivesItsSlotBack() {
+        LostJobPoller poller = new LostJobPoller();
+        java.time.Instant[] now = {java.time.Instant.parse("2026-10-25T00:00:00Z")};
+        SubmissionTracker tracker = new SubmissionTracker(1, poller, java.time.Duration.ofSeconds(60), () -> now[0]);
+        tracker.requestSlot("q1");
+        java.util.List<JobResult> reported = new java.util.ArrayList<>();
+        tracker.recordSubmitted("q1", "job-1", reported::add);
+        java.util.concurrent.CompletableFuture<Void> parked = tracker.requestSlot("q1");
+        assertTrue(!parked.isDone(), "the only slot is held by the lost job");
+
+        tracker.pollOutstanding();
+        now[0] = now[0].plusSeconds(60);
+        tracker.pollOutstanding();
+
+        assertEquals(1, reported.size());
+        assertEquals(JobResult.Status.FAILED, reported.get(0).status());
+        assertTrue(reported.get(0).error().contains("job-1"));
+        assertTrue(parked.isDone(), "the slot the lost job held now admits the parked caller");
+        assertTrue(tracker.isDrained());
+    }
+
+    @Test
+    void pollOutstanding_aBrokerThatIsUnreachableIsNotALostJob() {
+        LostJobPoller poller = new LostJobPoller();
+        poller.unreachable = true;
+        java.time.Instant[] now = {java.time.Instant.parse("2026-10-25T00:00:00Z")};
+        SubmissionTracker tracker = new SubmissionTracker(1, poller, java.time.Duration.ofSeconds(60), () -> now[0]);
+        tracker.requestSlot("q1");
+        java.util.List<JobResult> reported = new java.util.ArrayList<>();
+        tracker.recordSubmitted("q1", "job-1", reported::add);
+
+        now[0] = now[0].plusSeconds(3600);
+        tracker.pollOutstanding();   // must not throw, and must not fail the job
+
+        assertTrue(reported.isEmpty());
+        assertTrue(!tracker.isDrained());
+    }
+
+    @Test
+    void pollOutstanding_theGraceClockRestartsWhenTheBrokerKnowsTheJobAgain() {
+        java.util.concurrent.atomic.AtomicBoolean known = new java.util.concurrent.atomic.AtomicBoolean(false);
+        JobResultPoller flaky = (queue, id) -> known.get() ? JobResult.pending() : JobResult.unknown();
+        java.time.Instant[] now = {java.time.Instant.parse("2026-10-25T00:00:00Z")};
+        SubmissionTracker tracker = new SubmissionTracker(1, flaky, java.time.Duration.ofSeconds(60), () -> now[0]);
+        tracker.requestSlot("q1");
+        java.util.List<JobResult> reported = new java.util.ArrayList<>();
+        tracker.recordSubmitted("q1", "job-1", reported::add);
+
+        tracker.pollOutstanding();            // 404 at t=0
+        now[0] = now[0].plusSeconds(50);
+        known.set(true);
+        tracker.pollOutstanding();            // known again at t=50: PENDING
+        known.set(false);
+        now[0] = now[0].plusSeconds(50);
+        tracker.pollOutstanding();            // 404 again at t=100: the clock starts over
+
+        assertTrue(reported.isEmpty());
+    }
 }

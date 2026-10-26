@@ -34,4 +34,22 @@ class GpuBrokerHttpTest {
     void parseTotalSlots_malformedBody_throwsClientException() {
         assertThrows(GpuBrokerClientException.class, () -> http.parseTotalSlots("not json", "whisper-transcript"));
     }
+
+    @Test
+    void getJobResult_404_isUnknown_notPending() throws Exception {
+        com.sun.net.httpserver.HttpServer server =
+                com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/", exchange -> {
+            exchange.sendResponseHeaders(404, -1);
+            exchange.close();
+        });
+        server.start();
+        try {
+            GpuBrokerHttp real = new GpuBrokerHttp("http://127.0.0.1:" + server.getAddress().getPort(), "test");
+
+            assertEquals(JobResult.Status.UNKNOWN, real.getJobResult("marker-ocr", "gone").status());
+        } finally {
+            server.stop(0);
+        }
+    }
 }

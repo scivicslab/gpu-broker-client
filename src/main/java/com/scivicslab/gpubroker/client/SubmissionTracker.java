@@ -1,5 +1,7 @@
 package com.scivicslab.gpubroker.client;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.HashMap;
@@ -8,6 +10,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * Counts each {@code queueName}'s not-yet-completed jobs and hands out admission, wrapped as a
@@ -29,9 +32,23 @@ final class SubmissionTracker {
     private final Map<String, Deque<CompletableFuture<Void>>> waiting = new HashMap<>();
     private final Map<String, Map<String, Consumer<JobResult>>> outstanding = new HashMap<>();
 
+    /** How long the broker may answer 404 for a job before the job is reported {@link JobResult.Status#FAILED}. */
+    static final Duration DEFAULT_LOST_AFTER = Duration.ofMinutes(2);
+
+    private final Duration lostAfter;
+    private final Supplier<Instant> clock;
+    /** When each job was first answered 404; cleared the moment the broker knows the job again. */
+    private final Map<String, Instant> firstMissing = new HashMap<>();
+
     SubmissionTracker(int targetPerQueue, JobResultPoller poller) {
+        this(targetPerQueue, poller, DEFAULT_LOST_AFTER, Instant::now);
+    }
+
+    SubmissionTracker(int targetPerQueue, JobResultPoller poller, Duration lostAfter, Supplier<Instant> clock) {
         this.targetPerQueue = targetPerQueue;
         this.poller = poller;
+        this.lostAfter = lostAfter;
+        this.clock = clock;
     }
 
     /**
@@ -68,10 +85,27 @@ final class SubmissionTracker {
             Iterator<Map.Entry<String, Consumer<JobResult>>> jobs = queueEntry.getValue().entrySet().iterator();
             while (jobs.hasNext()) {
                 Map.Entry<String, Consumer<JobResult>> job = jobs.next();
-                JobResult result = poller.getJobResult(queueName, job.getKey());
-                if (result.status() == JobResult.Status.PENDING) {
+                JobResult result;
+                try {
+                    result = poller.getJobResult(queueName, job.getKey());
+                } catch (GpuBrokerClientException e) {
+                    // The broker is unreachable (restarting): keep the job and ask again next time.
                     continue;
                 }
+                if (result.status() == JobResult.Status.UNKNOWN) {
+                    Instant since = firstMissing.computeIfAbsent(job.getKey(), id -> clock.get());
+                    if (Duration.between(since, clock.get()).compareTo(lostAfter) < 0) {
+                        continue;
+                    }
+                    result = new JobResult(JobResult.Status.FAILED, null, null,
+                            "the broker no longer has job " + job.getKey() + " (HTTP 404 for "
+                                    + lostAfter.toSeconds() + " seconds or more)", null);
+                }
+                if (result.status() == JobResult.Status.PENDING) {
+                    firstMissing.remove(job.getKey());
+                    continue;
+                }
+                firstMissing.remove(job.getKey());
                 if (job.getValue() != null) {
                     job.getValue().accept(result);
                 }

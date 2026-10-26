@@ -11,10 +11,20 @@ import java.time.Instant;
 public record JobResult(Status status, byte[] body, String contentType, String error, Instant createdAt) {
 
     public enum Status {
-        PENDING, DONE, FAILED
+        PENDING, DONE, FAILED,
+        /**
+         * The broker answered 404: it has no such job. Produced by the poller and consumed by
+         * {@code SubmissionTracker}, which waits a grace period and then reports the job as
+         * {@link #FAILED}; never passed to a completion callback.
+         */
+        UNKNOWN
     }
 
     static JobResult pending() {
         return new JobResult(Status.PENDING, null, null, null, null);
+    }
+
+    static JobResult unknown() {
+        return new JobResult(Status.UNKNOWN, null, null, null, null);
     }
 }

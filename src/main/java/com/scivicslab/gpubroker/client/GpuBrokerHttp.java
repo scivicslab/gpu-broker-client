@@ -84,7 +84,11 @@ final class GpuBrokerHttp implements JobResultPoller {
         }
     }
 
-    /** Returns {@link JobResult#pending()} for a {@code 404} (job not found yet). */
+    /**
+     * Returns {@link JobResult#unknown()} for a {@code 404}: the broker has no such job. The broker
+     * registers a job before it answers the {@code POST}, so a 404 is never "not yet" -- it means the
+     * job was lost (a broker that restarted without its jobs, or one that expired the job).
+     */
     @Override
     public JobResult getJobResult(String queueName, String jobId) {
         HttpRequest request = HttpRequest.newBuilder()
@@ -93,7 +97,7 @@ final class GpuBrokerHttp implements JobResultPoller {
                 .build();
         HttpResponse<byte[]> response = send(request, HttpResponse.BodyHandlers.ofByteArray());
         if (response.statusCode() == 404) {
-            return JobResult.pending();
+            return JobResult.unknown();
         }
         if (response.statusCode() != 200) {
             throw new GpuBrokerClientException(
